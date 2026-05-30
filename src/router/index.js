@@ -19,8 +19,14 @@ const router = createRouter({
 
 router.beforeEach(async (to) => {
   if (!to.meta?.requiresAuth) return true
+  
+  if (!supabase || !supabase.auth) {
+    console.error('Supabase not initialized')
+    return { name: 'admin-login' }
+  }
+
   const { data } = await supabase.auth.getSession()
-  if (data.session) return true
+  if (data?.session) return true
   return { name: 'admin-login', query: { next: to.fullPath } }
 })
 
