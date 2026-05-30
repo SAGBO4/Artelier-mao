@@ -12,6 +12,15 @@ if (!isReady) {
   console.warn('Supabase configuration incomplete or invalid URL:', { url: url.substring(0, 10) + '...', isUrlValid })
 }
 
+// DEBUG: remove after investigation
+// eslint-disable-next-line no-console
+console.log('[Supabase Debug]', {
+  url_start: url ? url.substring(0, 20) : 'EMPTY',
+  key_start: anonKey ? anonKey.substring(0, 15) : 'EMPTY',
+  key_length: anonKey.length,
+  isReady,
+})
+
 export const supabase = isReady 
   ? createClient(url, anonKey) 
   : { 
