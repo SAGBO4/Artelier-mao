@@ -3,16 +3,34 @@ import { createClient } from '@supabase/supabase-js'
 const url = import.meta.env.VITE_SUPABASE_URL
 const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-if (!url || !anonKey) {
+// Validation more strict for production/Vercel
+const isReady = url && anonKey && url !== 'undefined' && anonKey !== 'undefined'
+
+if (!isReady) {
   // eslint-disable-next-line no-console
-  console.warn('Missing Supabase env vars: VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY')
+  console.warn('Supabase env vars are missing or invalid. Check Vercel project settings.')
 }
 
-// Only initialize if we have BOTH values to avoid crashing the app.
-export const supabase = (url && anonKey) 
+export const supabase = isReady 
   ? createClient(url, anonKey) 
   : { 
-      auth: { getSession: async () => ({ data: { session: null }, error: null }) },
-      from: () => ({ select: () => ({ order: () => ({ match: () => ({}) }) }) }) // minimal mock
+      auth: { 
+        getSession: async () => ({ data: { session: null }, error: null }),
+        signInWithPassword: async () => ({ 
+          data: { user: null, session: null }, 
+          error: { message: 'Configuration Supabase manquante sur le serveur de production.' } 
+        })
+      },
+      from: () => ({ 
+        select: () => ({ 
+          order: () => ({ 
+            match: () => ({ 
+              then: (cb) => cb({ data: [], error: { message: 'Supabase non configuré' } }) 
+            }),
+            then: (cb) => cb({ data: [], error: { message: 'Supabase non configuré' } })
+          }),
+          then: (cb) => cb({ data: [], error: { message: 'Supabase non configuré' } })
+        }) 
+      })
     }
 

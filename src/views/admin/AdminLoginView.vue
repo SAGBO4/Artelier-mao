@@ -16,7 +16,7 @@ async function onSubmit(e) {
   error.value = ''
   loading.value = true
   try {
-    const { error: err } = await supabase.auth.signInWithPassword({
+    const { data: resData, error: err } = await supabase.auth.signInWithPassword({
       email: email.value,
       password: password.value
     })
@@ -24,6 +24,7 @@ async function onSubmit(e) {
     router.replace(route.query.next || '/admin')
   } catch (e2) {
     error.value = e2?.message || 'Connexion impossible'
+    console.error('Login error:', e2)
   } finally {
     loading.value = false
   }
