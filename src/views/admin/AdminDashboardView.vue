@@ -2,6 +2,8 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { supabase } from '@/lib/supabase'
+import exifr from 'exifr'
+import imageCompression from 'browser-image-compression'
 import TweaksPanel from '@/components/tweaks/TweaksPanel.vue'
 import { useProjectsStore } from '@/stores/projects'
 import { useTeamStore } from '@/stores/team'
@@ -91,10 +93,10 @@ async function onPickFile(e, targetForm) {
   const file = e.target.files?.[0]
   if (!file) return
   
-  // Validation de base (Audit Sécurité)
-  const MAX_SIZE = 5 * 1024 * 1024 // 5Mo
+  // Limite relevée à 100Mo pour accepter les fichiers raw (CR2) avant traitement
+  const MAX_SIZE = 100 * 1024 * 1024 
   if (file.size > MAX_SIZE) {
-    error.value = "L'image est trop lourde (max 5 Mo)."
+    error.value = "L'image est trop lourde (max 100 Mo)."
     return
   }
 
@@ -102,11 +104,33 @@ async function onPickFile(e, targetForm) {
   error.value = ''
   
   try {
-    const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+    let processableFile = file
+    const isCR2 = file.name.toLowerCase().endsWith('.cr2')
+
+    // 1. Si CR2, on extrait l'aperçu JPEG intégré (rapide et efficace)
+    if (isCR2) {
+      const thumbnailData = await exifr.thumbnail(file)
+      if (thumbnailData) {
+        processableFile = new File([thumbnailData], file.name.replace(/\.cr2$/i, '.jpg'), { type: 'image/jpeg' })
+      } else {
+        throw new Error("Impossible de lire l'image CR2. Enregistrez-la en JPEG d'abord.")
+      }
+    }
+
+    // 2. On compresse l'image finale (ou le JPEG extrait) pour optimiser le stockage
+    const options = {
+      maxSizeMB: 2, // Limite à 2 Mo en sortie
+      maxWidthOrHeight: 1920,
+      useWebWorker: true,
+      initialQuality: 0.85
+    }
+    const compressedFile = await imageCompression(processableFile, options)
+    
+    const ext = compressedFile.name.split('.').pop()?.toLowerCase() || 'jpg'
     const path = `uploads/${Date.now()}-${Math.random().toString(16).slice(2)}.${ext}`
     
-    const { error: upErr } = await supabase.storage.from('site').upload(path, file, {
-      contentType: file.type,
+    const { error: upErr } = await supabase.storage.from('site').upload(path, compressedFile, {
+      contentType: compressedFile.type,
       upsert: true
     })
     
@@ -115,8 +139,8 @@ async function onPickFile(e, targetForm) {
     const { data } = supabase.storage.from('site').getPublicUrl(path)
     targetForm.image_url = data.publicUrl
   } catch (e2) {
-    // console.error(e2) // Pour le debug si besoin
-    error.value = "Erreur lors de l'envoi : " + (e2.message || e2.error_description || "Vérifiez votre connexion ou le bucket.")
+    console.error(e2) // Pour le debug si besoin
+    error.value = "Erreur lors du traitement de l'image : " + (e2.message || e2.error_description || "Vérifiez votre connexion.")
   } finally {
     saving.value = false
     e.target.value = ''
@@ -209,7 +233,7 @@ async function logout() {
             <span class="field-label">Image (JPEG ou PNG)</span>
             <div class="upload-zone-wrapper">
               <div class="upload-zone">
-                <input type="file" @change="e => onPickFile(e, projectForm)" accept="image/*" :disabled="saving" />
+                <input type="file" @change="e => onPickFile(e, projectForm)" accept="image/*,.cr2" :disabled="saving" />
                 <span v-if="saving" class="upload-loading">⌛ Envoi en cours...</span>
                 <span v-else-if="projectForm.image_url" class="upload-success">✓ Image prête</span>
               </div>
@@ -252,7 +276,7 @@ async function logout() {
             <span class="field-label">Portrait</span>
             <div class="upload-zone-wrapper">
               <div class="upload-zone">
-                <input type="file" @change="e => onPickFile(e, memberForm)" accept="image/*" :disabled="saving" />
+                <input type="file" @change="e => onPickFile(e, memberForm)" accept="image/*,.cr2" :disabled="saving" />
                 <span v-if="saving" class="upload-loading">⌛ Envoi en cours...</span>
                 <span v-else-if="memberForm.image_url" class="upload-success">✓ Image prête</span>
               </div>
@@ -291,7 +315,7 @@ async function logout() {
             <span class="field-label">Fichier Image</span>
             <div class="upload-zone-wrapper">
               <div class="upload-zone">
-                <input type="file" @change="e => onPickFile(e, showreelForm)" accept="image/*" :disabled="saving" />
+                <input type="file" @change="e => onPickFile(e, showreelForm)" accept="image/*,.cr2" :disabled="saving" />
                 <span v-if="saving" class="upload-loading">⌛ Envoi en cours...</span>
                 <span v-else-if="showreelForm.image_url" class="upload-success">✓ Image prête</span>
               </div>
